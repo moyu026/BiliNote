@@ -247,15 +247,15 @@ class NoteGenerator:
         :param platform: 平台标识，需在 SUPPORT_PLATFORM_MAP 中
         :return: 对应的 Downloader 子类实例
         """
-        downloader_cls = SUPPORT_PLATFORM_MAP.get(platform)
+        downloader_instance = SUPPORT_PLATFORM_MAP.get(platform)
         logger.debug(f"实例化下载器 -  {platform}")
-        if not downloader_cls:
+        if not downloader_instance:
             logger.error(f"不支持的平台：{platform}")
             raise NoteError(code=NoteErrorEnum.PLATFORM_NOT_SUPPORTED.code,
                             message=NoteErrorEnum.PLATFORM_NOT_SUPPORTED.message)
         
-        logger.info(f"使用下载器：{downloader_cls.__name__}")
-        return downloader_cls
+        logger.info(f"使用下载器：{downloader_instance.__class__.__name__}")
+        return downloader_instance
 
     def _update_status(self, task_id: Optional[str], status: Union[str, TaskStatus], message: Optional[str] = None):
         """
