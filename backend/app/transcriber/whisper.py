@@ -114,13 +114,22 @@ class WhisperTranscriber(Transcriber):
                 language=info.language,
                 full_text=full_text.strip(),
                 segments=segments,
-                raw=info
+                raw={
+                    "language": info.language,
+                    "language_probability": info.language_probability,
+                    "duration": info.duration,
+                    "duration_after_vad": info.duration_after_vad,
+                    "all_language_probs": info.all_language_probs if hasattr(info, 'all_language_probs') else None,
+                    "transcription_options": info.transcription_options.__dict__ if hasattr(info, 'transcription_options') else None,
+                    "vad_options": info.vad_options.__dict__ if hasattr(info, 'vad_options') and info.vad_options else None,
+                }
             )
             # Call on_finish to trigger RAG vector DB creation
             asyncio.create_task(self.on_finish(task_id, file_path, result, embedding_model_name))
             return result
         except Exception as e:
-            print(f"转写失败：{e}")
+            logger.error(f"转写失败：{e}")
+            raise
 
 
     async def on_finish(self, task_id: str, video_path:str, result: TranscriptResult, embedding_model_name: str)->None:
