@@ -49,6 +49,7 @@ origins = [
     "http://localhost",
     "http://127.0.0.1",
     "http://tauri.localhost",
+    "http://localhost:3015", # Add frontend origin
 ]
 
 app.add_middleware(

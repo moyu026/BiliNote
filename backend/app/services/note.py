@@ -26,7 +26,7 @@ from app.gpt.gpt_factory import GPTFactory
 from app.models.audio_model import AudioDownloadResult
 from app.models.gpt_model import GPTSource
 from app.models.model_config import ModelConfig
-from app.models.notes_model import AudioDownloadResult, NoteResult
+from app.models.notes_model import NoteResult
 from app.models.transcriber_model import TranscriptResult, TranscriptSegment
 from app.services.constant import SUPPORT_PLATFORM_MAP
 from app.services.provider import ProviderService
@@ -94,7 +94,8 @@ class NoteGenerator:
         video_understanding: bool = False,
         video_interval: int = 0,
         grid_size: Optional[List[int]] = None,
-    ) -> NoteResult | None:
+        embedding_model_name: Optional[str] = None, # New parameter
+    ) -> Optional[NoteResult]:
         """
         主流程：按步骤依次下载、转写、GPT 总结、截图/链接处理、存库、返回 NoteResult。
 
@@ -152,6 +153,7 @@ class NoteGenerator:
                 audio_file=audio_meta.file_path,
                 transcript_cache_file=transcript_cache_file,
                 status_phase=TaskStatus.TRANSCRIBING,
+                embedding_model_name=embedding_model_name,
             )
 
             # 3. GPT 总结
@@ -247,19 +249,13 @@ class NoteGenerator:
         """
         downloader_cls = SUPPORT_PLATFORM_MAP.get(platform)
         logger.debug(f"实例化下载器 -  {platform}")
-        instance = None
         if not downloader_cls:
             logger.error(f"不支持的平台：{platform}")
             raise NoteError(code=NoteErrorEnum.PLATFORM_NOT_SUPPORTED.code,
                             message=NoteErrorEnum.PLATFORM_NOT_SUPPORTED.message)
-        try:
-            instance = downloader_cls
-        except Exception as e:
-            logger.error(f"实例化下载器失败：{e}")
-
-
-        logger.info(f"使用下载器：{downloader_cls.__class__}")
-        return instance
+        
+        logger.info(f"使用下载器：{downloader_cls.__name__}")
+        return downloader_cls
 
     def _update_status(self, task_id: Optional[str], status: Union[str, TaskStatus], message: Optional[str] = None):
         """
@@ -323,7 +319,7 @@ class NoteGenerator:
         video_understanding: bool,
         video_interval: int,
         grid_size: List[int],
-    ) -> AudioDownloadResult | None:
+    ) -> Optional[AudioDownloadResult]:
         """
         1. 检查音频缓存；若不存在，则根据需要下载音频或视频（若需截图/可视化）。
         2. 如果需要视频，则先下载视频并生成缩略图集，再下载音频。
@@ -390,6 +386,8 @@ class NoteGenerator:
                 output_dir=output_path,
                 need_video=need_video,
             )
+            # 添加原始 URL
+            audio.original_url = str(video_url)
             # 缓存 audio 元信息到本地 JSON
             audio_cache_file.write_text(json.dumps(asdict(audio), ensure_ascii=False, indent=2), encoding="utf-8")
             logger.info(f"音频下载并缓存成功 ({audio_cache_file})")
@@ -405,7 +403,8 @@ class NoteGenerator:
         audio_file: str,
         transcript_cache_file: Path,
         status_phase: TaskStatus,
-    ) -> TranscriptResult | None:
+        embedding_model_name: str, # New parameter
+    ) -> Optional[TranscriptResult]:
         """
         1. 检查转写缓存；若存在则尝试加载，否则调用转写器生成并缓存。
         2. 返回 TranscriptResult 对象
@@ -413,6 +412,7 @@ class NoteGenerator:
         :param audio_file: 音频文件本地路径
         :param transcript_cache_file: 转写结果缓存路径
         :param status_phase: 对应的状态枚举，如 TaskStatus.TRANSCRIBING
+        :param embedding_model_name: Embedding model name for RAG
         :return: TranscriptResult 对象
         """
         task_id = transcript_cache_file.stem.split("_")[0]
@@ -431,7 +431,7 @@ class NoteGenerator:
         # 调用转写器
         try:
             logger.info("开始转写音频")
-            transcript = self.transcriber.transcript(file_path=audio_file)
+            transcript = self.transcriber.transcript(file_path=audio_file, task_id=task_id, embedding_model_name=embedding_model_name)
             transcript_cache_file.write_text(json.dumps(asdict(transcript), ensure_ascii=False, indent=2), encoding="utf-8")
             logger.info(f"转写并缓存成功 ({transcript_cache_file})")
             return transcript
@@ -452,7 +452,7 @@ class NoteGenerator:
         style: Optional[str],
         extras: Optional[str],
             video_img_urls: List[str],
-    ) -> str | None:
+    ) -> Optional[str]:
         """
         调用 GPT 对转写结果进行总结，生成 Markdown 文本并缓存。
 
@@ -524,7 +524,7 @@ class NoteGenerator:
 
         return markdown
 
-    def _insert_screenshots(self, markdown: str, video_path: Path) -> str | None | Any:
+    def _insert_screenshots(self, markdown: str, video_path: Path) -> Optional[str]:
         """
         扫描 Markdown 文本中所有 Screenshot 标记，并替换为实际生成的截图链接。
 

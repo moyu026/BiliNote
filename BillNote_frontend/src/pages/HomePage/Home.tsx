@@ -12,6 +12,7 @@ export const HomePage: FC = () => {
   const currentTask = tasks.find(t => t.id === currentTaskId)
 
   const [status, setStatus] = useState<ViewStatus>('idle')
+  const [selectedEmbeddingModel, setSelectedEmbeddingModel] = useState<string>('') // New state
 
   const content = currentTask?.markdown || ''
 
@@ -36,7 +37,13 @@ export const HomePage: FC = () => {
   return (
     <HomeLayout
       NoteForm={<NoteForm />}
-      Preview={<MarkdownViewer status={status} />}
+      Preview={
+        <MarkdownViewer
+          status={status}
+          selectedEmbeddingModel={selectedEmbeddingModel}
+          setSelectedEmbeddingModel={setSelectedEmbeddingModel}
+        />
+      }
       History={<History />}
     />
   )

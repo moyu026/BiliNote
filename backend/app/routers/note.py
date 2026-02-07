@@ -45,10 +45,11 @@ class VideoRequest(BaseModel):
     task_id: Optional[str] = None
     format: Optional[list] = []
     style: str = None
-    extras: Optional[str]=None
+    extras: Optional[str] = None
     video_understanding: Optional[bool] = False
     video_interval: Optional[int] = 0
     grid_size: Optional[list] = []
+    embedding_model_name: Optional[str] = "default_sentence_transformer"  # New field for embedding model
 
     @field_validator("video_url")
     def validate_supported_url(cls, v):
@@ -76,7 +77,7 @@ def save_note_to_file(task_id: str, note):
 def run_note_task(task_id: str, video_url: str, platform: str, quality: DownloadQuality,
                   link: bool = False, screenshot: bool = False, model_name: str = None, provider_id: str = None,
                   _format: list = None, style: str = None, extras: str = None, video_understanding: bool = False,
-                  video_interval=0, grid_size=[]
+                  video_interval=0, grid_size=[], embedding_model_name: str = "default_sentence_transformer"
                   ):
 
     if not model_name or not provider_id:
@@ -93,10 +94,11 @@ def run_note_task(task_id: str, video_url: str, platform: str, quality: Download
         _format=_format,
         style=style,
         extras=extras,
-        screenshot=screenshot
-        , video_understanding=video_understanding,
+        screenshot=screenshot,
+        video_understanding=video_understanding,
         video_interval=video_interval,
-        grid_size=grid_size
+        grid_size=grid_size,
+        embedding_model_name=embedding_model_name
     )
     logger.info(f"Note generated: {task_id}")
     if not note or not note.markdown:
@@ -153,7 +155,8 @@ def generate_note(data: VideoRequest, background_tasks: BackgroundTasks):
 
         background_tasks.add_task(run_note_task, task_id, data.video_url, data.platform, data.quality, data.link,
                                   data.screenshot, data.model_name, data.provider_id, data.format, data.style,
-                                  data.extras, data.video_understanding, data.video_interval, data.grid_size)
+                                  data.extras, data.video_understanding, data.video_interval, data.grid_size,
+                                  data.embedding_model_name)
         return R.success({"task_id": task_id})
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))

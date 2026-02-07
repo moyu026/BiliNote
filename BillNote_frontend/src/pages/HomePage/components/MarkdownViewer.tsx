@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef } from 'react'
+import React from 'react'
 import ReactMarkdown from 'react-markdown'
 import { Button } from '@/components/ui/button.tsx'
 import { Copy, Download, ArrowRight, Play, ExternalLink } from 'lucide-react'
@@ -23,6 +24,9 @@ import { noteStyles } from '@/constant/note.ts'
 import { MarkdownHeader } from '@/pages/HomePage/components/MarkdownHeader.tsx'
 import TranscriptViewer from '@/pages/HomePage/components/transcriptViewer.tsx'
 import MarkmapEditor from '@/pages/HomePage/components/MarkmapComponent.tsx'
+import { RagQA } from '@/pages/HomePage/components/RagQA.tsx'
+import { VideoPlayer } from '@/pages/HomePage/components/VideoPlayer.tsx'
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog.tsx'
 
 interface VersionNote {
   ver_id: string
@@ -35,6 +39,8 @@ interface VersionNote {
 interface MarkdownViewerProps {
   content: string | VersionNote[]
   status: 'idle' | 'loading' | 'success' | 'failed'
+  selectedEmbeddingModel: string; // New prop for selected embedding model
+  setSelectedEmbeddingModel: (model: string) => void; // New prop for setting embedding model
 }
 
 const steps = [
@@ -45,7 +51,7 @@ const steps = [
   { label: '保存完成', key: 'SUCCESS' },
 ]
 
-const MarkdownViewer: FC<MarkdownViewerProps> = ({ status }) => {
+const MarkdownViewer: FC<MarkdownViewerProps> = ({ status, selectedEmbeddingModel, setSelectedEmbeddingModel }) => {
   const [copied, setCopied] = useState(false)
   const [currentVerId, setCurrentVerId] = useState<string>('')
   const [selectedContent, setSelectedContent] = useState<string>('')
@@ -62,6 +68,13 @@ const MarkdownViewer: FC<MarkdownViewerProps> = ({ status }) => {
   const [showTranscribe, setShowTranscribe] = useState(false)
   const [viewMode, setViewMode] = useState<'map' | 'preview'>('preview')
   const svgRef = useRef<SVGSVGElement>(null)
+  
+  // RAG and Video Player states
+  const [showRagQA, setShowRagQA] = useState(false)
+  const [ragTaskId, setRagTaskId] = useState<string>('')
+  const [showVideoPlayer, setShowVideoPlayer] = useState(false)
+  const [videoUrlToPlay, setVideoUrlToPlay] = useState<string>('')
+  const [videoTimestamp, setVideoTimestamp] = useState<number>(0)
   // 多版本内容处理
   useEffect(() => {
     if (!currentTask) return
@@ -103,32 +116,17 @@ const MarkdownViewer: FC<MarkdownViewerProps> = ({ status }) => {
       toast.error('复制失败')
     }
   }
-  const alertButton = {
-    id: 'alert',
-    title: '测试警告',
-    content: '⚠️',
-    onClick: () => alert('你点击了自定义按钮！'),
+
+  const handlePlayVideo = (url: string, timestamp: number = 0) => {
+    setVideoUrlToPlay(url)
+    setVideoTimestamp(timestamp)
+    setShowVideoPlayer(true)
   }
-  const exportButton = {
-    id: 'export',
-    title: '导出思维导图',
-    content: '⤓',
-    onClick: () => {
-      const svgEl = svgRef.current
-      if (!svgEl) return
-      // 同上面的序列化逻辑
-      const serializer = new XMLSerializer()
-      const source = serializer.serializeToString(svgEl)
-      const blob = new Blob(['<?xml version="1.0" encoding="UTF-8"?>', source], {
-        type: 'image/svg+xml;charset=utf-8',
-      })
-      const url = URL.createObjectURL(blob)
-      const a = document.createElement('a')
-      a.href = url
-      a.download = 'mindmap.svg'
-      a.click()
-      URL.revokeObjectURL(url)
-    },
+
+  const handleOpenRag = (taskId: string, embeddingModelName: string) => {
+    setRagTaskId(taskId)
+    setSelectedEmbeddingModel(embeddingModelName);
+    setShowRagQA(true)
   }
   const handleDownload = () => {
     const task = getCurrentTask()
@@ -200,6 +198,10 @@ const MarkdownViewer: FC<MarkdownViewerProps> = ({ status }) => {
         setShowTranscribe={setShowTranscribe}
         viewMode={viewMode}
         setViewMode={setViewMode}
+        onPlayVideo={handlePlayVideo}
+        onOpenRag={handleOpenRag}
+        selectedEmbeddingModel={selectedEmbeddingModel}
+        setSelectedEmbeddingModel={setSelectedEmbeddingModel}
       />
 
       {viewMode === 'map' ? (
@@ -258,11 +260,14 @@ const MarkdownViewer: FC<MarkdownViewerProps> = ({ status }) => {
                       ),
 
                       // Paragraphs with better line height
-                      p: ({ children, ...props }) => (
-                        <p className="leading-7 [&:not(:first-child)]:mt-6" {...props}>
-                          {children}
-                        </p>
-                      ),
+                      p: ({ children, ...props }) => {
+                        // Always render as div to avoid hydration issues with nested block elements
+                        return (
+                          <div className="leading-7 [&:not(:first-child)]:mt-6" {...props}>
+                            {children}
+                          </div>
+                        )
+                      },
 
                       // Enhanced links with special handling for "原片" links
                       a: ({ href, children, ...props }) => {
@@ -486,6 +491,43 @@ const MarkdownViewer: FC<MarkdownViewerProps> = ({ status }) => {
           )}
         </div>
       )}
+      
+      {/* RAG Q&A Dialog */}
+      <Dialog open={showRagQA} onOpenChange={setShowRagQA}>
+        <DialogContent className="max-w-3xl max-h-[80vh]">
+          <DialogHeader>
+            <DialogTitle>RAG 问答</DialogTitle>
+          </DialogHeader>
+          <div className="h-[60vh]">
+            {ragTaskId && currentTask && (
+              <RagQA
+                taskId={ragTaskId}
+                embeddingModelName={selectedEmbeddingModel}
+                llmModelName={currentTask.formData?.model_name || ''}
+                providerId={currentTask.formData?.provider_id || ''}
+                onJumpToVideoTime={handlePlayVideo}
+              />
+            )}
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* Video Player Dialog */}
+      <Dialog open={showVideoPlayer} onOpenChange={setShowVideoPlayer}>
+        <DialogContent className="max-w-5xl max-h-[90vh]">
+          <DialogHeader>
+            <DialogTitle>视频播放</DialogTitle>
+          </DialogHeader>
+          <div className="h-[70vh]">
+            {videoUrlToPlay && (
+              <VideoPlayer
+                videoUrl={videoUrlToPlay}
+                initialTime={videoTimestamp}
+              />
+            )}
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   )
 }

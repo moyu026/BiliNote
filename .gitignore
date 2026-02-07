@@ -320,5 +320,20 @@ cython_debug/
 /backend/uploads/*
 /backend/.idea/*
 /backend/config/*
+/backend/chroma_db/*
 /BiliNote_frontend/.idea/*
 /BiliNote_frontend/src-tauri/bin/
+
+# Root level sensitive files
+/bili_note.db
+/chroma_db/*
+/note_results/*
+/static/*
+/config/*
+/logs/*
+*.bat
+.vs/
+.vscode/
+ADD_BGE_MODEL.md
+QUICK_START.md
+RAG_FIX.md

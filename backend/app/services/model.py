@@ -34,10 +34,10 @@ class ModelService:
             gpt = GPTFactory().from_config(config)
             models = gpt.list_models()
             if verbose:
-                print(f"[{provider['name']}] 模型列表: {models}")
+                logger.info(f"[{provider['name']}] 模型列表: {models}")
             return models
         except Exception as e:
-            print(f"[{provider['name']}] 获取模型失败: {e}")
+            logger.error(f"[{provider['name']}] 获取模型失败: {e}")
             return []
 
     @staticmethod
@@ -45,20 +45,20 @@ class ModelService:
         try:
             raw_models = get_all_models()
             if verbose:
-                print(f"所有模型列表: {raw_models}")
+                logger.info(f"所有模型列表: {raw_models}")
             return ModelService._format_models(raw_models)
         except Exception as e:
-            print(f"获取所有模型失败: {e}")
+            logger.error(f"获取所有模型失败: {e}")
             return []
     @staticmethod
     def get_all_models_safe(verbose: bool = False):
         try:
             raw_models = get_all_models()
             if verbose:
-                print(f"所有模型列表: {raw_models}")
+                logger.info(f"所有模型列表: {raw_models}")
             return ModelService._format_models(raw_models)
         except Exception as e:
-            print(f"获取所有模型失败: {e}")
+            logger.error(f"获取所有模型失败: {e}")
             return []
     @staticmethod
     def _format_models(raw_models: list) -> list:
@@ -85,9 +85,11 @@ class ModelService:
     def get_all_models_by_id(provider_id: str, verbose: bool = False):
         try:
             provider = ProviderService.get_provider_by_id(provider_id)
+            if not provider:
+                logger.error(f"Provider {provider_id} not found")
+                return []
 
             models = ModelService.get_model_list(provider["id"], verbose=verbose)
-            print(type(models))
             serializable_models = [m.dict() for m in models.data]
             model_list = {
                 "models": serializable_models
@@ -96,7 +98,6 @@ class ModelService:
             logger.info(f"[{provider['name']}] 获取模型成功")
             return model_list
         except Exception as e:
-            # print(f"[{provider_id}] 获取模型失败: {e}")
             logger.error(f"[{provider_id}] 获取模型失败: {e}")
             return []
     @staticmethod
@@ -121,12 +122,12 @@ class ModelService:
 
 
     @staticmethod
-    def delete_model_by_id( model_id: int) -> bool:
+    def delete_model_by_id(model_id: int) -> bool:
         try:
             delete_model(model_id)
             return True
         except Exception as e:
-            print(f"[{model_id}] <UNK>: {e}")
+            logger.error(f"删除模型 {model_id} 失败: {e}")
             return False
     @staticmethod
     def add_new_model(provider_id: int, model_name: str) -> bool:
@@ -134,21 +135,21 @@ class ModelService:
             # 先查供应商是否存在
             provider = ProviderService.get_provider_by_id(provider_id)
             if not provider:
-                print(f"供应商ID {provider_id} 不存在，无法添加模型")
+                logger.error(f"供应商ID {provider_id} 不存在，无法添加模型")
                 return False
 
             # 查询是否已存在同名模型
             existing = get_model_by_provider_and_name(provider_id, model_name)
             if existing:
-                print(f"模型 {model_name} 已存在于供应商ID {provider_id} 下，跳过插入")
+                logger.warning(f"模型 {model_name} 已存在于供应商ID {provider_id} 下，跳过插入")
                 return False
 
             # 插入模型
             insert_model(provider_id=provider_id, model_name=model_name)
-            print(f"模型 {model_name} 已成功添加到供应商ID {provider_id}")
+            logger.info(f"模型 {model_name} 已成功添加到供应商ID {provider_id}")
             return True
         except Exception as e:
-            print(f"添加模型失败: {e}")
+            logger.error(f"添加模型失败: {e}")
             return False
 
 if __name__ == '__main__':

@@ -5,7 +5,7 @@ from app.models.transcriber_model import TranscriptResult
 
 class Transcriber(ABC):
     @abstractmethod
-    def transcript(self,file_path:str)->TranscriptResult:
+    def transcript(self,file_path:str, task_id: str, embedding_model_name: str)->TranscriptResult:
         '''
 
         :param file_path:音频路径

@@ -1,11 +1,12 @@
 'use client'
 
 import { useEffect, useState } from 'react'
-import { Copy, Download, BrainCircuit } from 'lucide-react'
+import { Copy, Download, BrainCircuit, Play, MessageSquareText } from 'lucide-react' // Import new icons
 import { Button } from '@/components/ui/button'
-import { Select, SelectContent, SelectItem, SelectTrigger } from '@/components/ui/select'
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select' // Added SelectValue
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip'
 import { Badge } from '@/components/ui/badge'
+import { API_BASE_URL } from '@/lib/api' // Assuming API_BASE_URL exists for fetching embedding models
 
 interface VersionNote {
   ver_id: string
@@ -17,6 +18,10 @@ interface VersionNote {
 interface NoteHeaderProps {
   currentTask?: {
     markdown: VersionNote[] | string
+    audioMeta: {
+      original_url: string; // Add original_url to currentTask
+    }
+    id: string; // Add task id
   }
   isMultiVersion: boolean
   currentVerId: string
@@ -27,7 +32,13 @@ interface NoteHeaderProps {
   onCopy: () => void
   onDownload: () => void
   createAt?: string | Date
-  setShowTranscribe: (show: boolean) => void
+  showTranscribe: (show: boolean) => void
+  viewMode: 'map' | 'preview' // Added viewMode
+  setViewMode: (mode: 'map' | 'preview') => void // Added setViewMode
+  onPlayVideo: (url: string) => void // New prop for playing video
+  onOpenRag: (taskId: string, embeddingModelName: string) => void // New prop for opening RAG Q&A
+  selectedEmbeddingModel: string; // New prop for selected embedding model
+  setSelectedEmbeddingModel: (model: string) => void; // New prop for setting embedding model
 }
 
 export function MarkdownHeader({
@@ -45,8 +56,13 @@ export function MarkdownHeader({
   setShowTranscribe,
   viewMode,
   setViewMode,
+  onPlayVideo, // Destructure new prop
+  onOpenRag, // Destructure new prop
+  selectedEmbeddingModel, // Destructure new prop
+  setSelectedEmbeddingModel, // Destructure new prop
 }: NoteHeaderProps) {
   const [copied, setCopied] = useState(false)
+  const [embeddingModels, setEmbeddingModels] = useState<string[]>([])
 
   useEffect(() => {
     let timer: NodeJS.Timeout
@@ -55,6 +71,40 @@ export function MarkdownHeader({
     }
     return () => clearTimeout(timer)
   }, [copied])
+
+  // Fetch available embedding models on component mount
+  useEffect(() => {
+    const fetchEmbeddingModels = async () => {
+      try {
+        const response = await fetch(`${API_BASE_URL}/rag/embedding_models`)
+        if (!response.ok) {
+          throw new Error('Failed to fetch embedding models')
+        }
+        const models = await response.json()
+        console.log('Fetched embedding models:', models)
+        setEmbeddingModels(models)
+        if (models.length > 0 && !selectedEmbeddingModel) {
+          setSelectedEmbeddingModel(models[0]) // Select the first model by default
+        }
+      } catch (error) {
+        console.error('Error fetching embedding models:', error)
+        // Optionally show a toast error to the user
+      }
+    }
+    fetchEmbeddingModels()
+  }, [selectedEmbeddingModel, setSelectedEmbeddingModel])
+
+  // Debug: Log currentTask to check original_url
+  useEffect(() => {
+    console.log('=== MarkdownHeader Debug ===')
+    console.log('currentTask:', currentTask)
+    console.log('audioMeta:', currentTask?.audioMeta)
+    console.log('original_url:', currentTask?.audioMeta?.original_url)
+    console.log('task id:', currentTask?.id)
+    console.log('selectedEmbeddingModel:', selectedEmbeddingModel)
+    console.log('embeddingModels:', embeddingModels)
+  }, [currentTask, selectedEmbeddingModel, embeddingModels])
+
 
   const handleCopy = () => {
     onCopy()
@@ -84,17 +134,12 @@ export function MarkdownHeader({
 
   return (
     <div className="sticky top-0 z-10 flex flex-wrap items-center justify-between gap-3 border-b bg-white/95 px-4 py-2 backdrop-blur-sm">
-      {/* 左侧区域：版本 + 标签 + 创建时间 */}
+      {/* 左侧区域：版本 + 标签 + 创建时间 + Embedding Model Selector */}
       <div className="flex flex-wrap items-center gap-3">
         {isMultiVersion && (
           <Select value={currentVerId} onValueChange={setCurrentVerId}>
             <SelectTrigger className="h-8 w-[160px] text-sm">
-              <div className="flex items-center">
-                {(() => {
-                  const idx = currentTask?.markdown.findIndex(v => v.ver_id === currentVerId)
-                  return idx !== -1 ? `版本（${currentVerId.slice(-6)}）` : ''
-                })()}
-              </div>
+              <SelectValue placeholder="选择版本" />
             </SelectTrigger>
 
             <SelectContent>
@@ -109,6 +154,20 @@ export function MarkdownHeader({
             </SelectContent>
           </Select>
         )}
+        {/* New Embedding Model Selector */}
+        <Select value={selectedEmbeddingModel} onValueChange={setSelectedEmbeddingModel}>
+            <SelectTrigger className="h-8 w-[180px] text-sm">
+                <SelectValue placeholder={selectedEmbeddingModel || "选择 Embedding 模型"} />
+            </SelectTrigger>
+            <SelectContent>
+                {embeddingModels.map((model) => (
+                    <SelectItem key={model} value={model}>
+                        {model}
+                    </SelectItem>
+                ))}
+            </SelectContent>
+        </Select>
+
 
         <Badge variant="secondary" className="bg-pink-100 text-pink-700 hover:bg-pink-200">
           {modelName}
@@ -124,6 +183,44 @@ export function MarkdownHeader({
 
       {/* 右侧操作按钮 */}
       <div className="flex items-center gap-1">
+        {/* Play Button */}
+        {currentTask?.audioMeta?.original_url && (
+            <TooltipProvider>
+                <Tooltip>
+                    <TooltipTrigger asChild>
+                        <Button
+                            onClick={() => onPlayVideo(currentTask.audioMeta.original_url)}
+                            variant="ghost"
+                            size="sm"
+                            className="h-8 px-2"
+                        >
+                            <Play className="mr-1.5 h-4 w-4" />
+                            <span className="text-sm">播放</span>
+                        </Button>
+                    </TooltipTrigger>
+                    <TooltipContent>播放视频</TooltipContent>
+                </Tooltip>
+            </TooltipProvider>
+        )}
+        {/* RAG Q&A Button */}
+        {currentTask?.id && selectedEmbeddingModel && (
+            <TooltipProvider>
+                <Tooltip>
+                    <TooltipTrigger asChild>
+                        <Button
+                            onClick={() => onOpenRag(currentTask.id, selectedEmbeddingModel)}
+                            variant="ghost"
+                            size="sm"
+                            className="h-8 px-2"
+                        >
+                            <MessageSquareText className="mr-1.5 h-4 w-4" />
+                            <span className="text-sm">RAG 问答</span>
+                        </Button>
+                    </TooltipTrigger>
+                    <TooltipContent>RAG 问答</TooltipContent>
+                </Tooltip>
+            </TooltipProvider>
+        )}
         <TooltipProvider>
           <Tooltip>
             <TooltipTrigger asChild>

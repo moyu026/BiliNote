@@ -14,6 +14,7 @@ export const generateNote = async (data: {
   video_understand?: boolean
   video_interval?: number
   grid_size: Array<number>
+  embedding_model_name?: string  // New field for embedding model
 }) => {
   try {
     console.log('generateNote', data)

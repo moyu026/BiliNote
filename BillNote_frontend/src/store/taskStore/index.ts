@@ -15,6 +15,7 @@ export interface AudioMeta {
   raw_info: any
   title: string
   video_id: string
+  original_url?: string  // 添加原始视频 URL
 }
 
 export interface Segment {

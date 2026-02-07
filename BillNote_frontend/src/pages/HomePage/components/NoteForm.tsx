@@ -58,6 +58,7 @@ const formSchema = z
       .tuple([z.coerce.number().min(1).max(10), z.coerce.number().min(1).max(10)])
       .default([3, 3])
       .optional(),
+    embedding_model_name: z.string().default('default_sentence_transformer').optional(),
   })
   .superRefine(({ video_url, platform }, ctx) => {
     if (platform === 'local') {
@@ -131,6 +132,8 @@ const NoteForm = () => {
   const navigate = useNavigate();
   const [isUploading, setIsUploading] = useState(false)
   const [uploadSuccess, setUploadSuccess] = useState(false)
+  const [embeddingModels, setEmbeddingModels] = useState<string[]>([])
+  
   /* ---- 全局状态 ---- */
   const { addPendingTask, currentTaskId, setCurrentTask, getCurrentTask, retryTask } =
     useTaskStore()
@@ -147,6 +150,7 @@ const NoteForm = () => {
       video_interval: 4,
       grid_size: [3, 3],
       format: [],
+      embedding_model_name: 'default_sentence_transformer',
     },
   })
   const currentTask = getCurrentTask()
@@ -162,6 +166,21 @@ const NoteForm = () => {
   /* ---- 副作用 ---- */
   useEffect(() => {
     loadEnabledModels()
+    
+    // Fetch embedding models
+    const fetchEmbeddingModels = async () => {
+      try {
+        const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8483/api'
+        const response = await fetch(`${API_BASE_URL}/rag/embedding_models`)
+        if (response.ok) {
+          const models = await response.json()
+          setEmbeddingModels(models)
+        }
+      } catch (error) {
+        console.error('Failed to fetch embedding models:', error)
+      }
+    }
+    fetchEmbeddingModels()
 
     return
   }, [])
@@ -184,6 +203,7 @@ const NoteForm = () => {
       video_interval: formData.video_interval ?? 4,
       grid_size: formData.grid_size ?? [3, 3],
       format: formData.format ?? [],
+      embedding_model_name: formData.embedding_model_name ?? 'default_sentence_transformer',
     })
   }, [
     // 当下面任意一个变了，就重新 reset
@@ -419,6 +439,37 @@ const NoteForm = () => {
                </FormItem>
              )
             }
+
+            {/* Embedding 模型选择 */}
+            <FormField
+              className="w-full"
+              control={form.control}
+              name="embedding_model_name"
+              render={({ field }) => (
+                <FormItem>
+                  <SectionHeader title="Embedding 模型" tip="用于 RAG 向量化的模型" />
+                  <Select
+                    value={field.value}
+                    onValueChange={field.onChange}
+                    defaultValue={field.value}
+                  >
+                    <FormControl>
+                      <SelectTrigger className="w-full min-w-0 truncate">
+                        <SelectValue placeholder="选择 Embedding 模型" />
+                      </SelectTrigger>
+                    </FormControl>
+                    <SelectContent>
+                      {embeddingModels.map(model => (
+                        <SelectItem key={model} value={model}>
+                          {model}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
 
             {/* 笔记风格 */}
             <FormField

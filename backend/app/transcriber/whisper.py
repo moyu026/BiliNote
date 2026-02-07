@@ -1,3 +1,4 @@
+import asyncio
 from faster_whisper import WhisperModel
 
 from app.decorators.timeit import timeit
@@ -6,6 +7,7 @@ from app.transcriber.base import Transcriber
 from app.utils.env_checker import is_cuda_available, is_torch_installed
 from app.utils.logger import get_logger
 from app.utils.path_helper import get_model_dir
+from app.services.rag_service import RAGService  # Import RAGService
 
 from events import transcription_finished
 from pathlib import Path
@@ -21,13 +23,13 @@ logger=get_logger(__name__)
 
 MODEL_MAP={
     "tiny": "pengzhendong/faster-whisper-tiny",
-    'base':'pengzhendong/faster-whisper-base',
-    'small':'pengzhendong/faster-whisper-small',
-    'medium':'pengzhendong/faster-whisper-medium',
-    'large-v1':'pengzhendong/faster-whisper-large-v1',
-    'large-v2':'pengzhendong/faster-whisper-large-v2',
-    'large-v3':'pengzhendong/faster-whisper-large-v3',
-    'large-v3-turbo':'pengzhendong/faster-whisper-large-v3-turbo',
+    "base":"pengzhendong/faster-whisper-base",
+    "small":"pengzhendong/faster-whisper-small",
+    "medium":"pengzhendong/faster-whisper-medium",
+    "large-v1":"pengzhendong/faster-whisper-large-v1",
+    "large-v2":"pengzhendong/faster-whisper-large-v2",
+    "large-v3":"pengzhendong/faster-whisper-large-v3",
+    "large-v3-turbo":"pengzhendong/faster-whisper-large-v3-turbo",
 }
 
 class WhisperTranscriber(Transcriber):
@@ -91,7 +93,7 @@ class WhisperTranscriber(Transcriber):
             return False
 
     @timeit
-    def transcript(self, file_path: str) -> TranscriptResult:
+    def transcript(self, file_path: str, task_id: str, embedding_model_name: str) -> TranscriptResult:
         try:
 
             segments_raw, info = self.model.transcribe(file_path)
@@ -114,15 +116,19 @@ class WhisperTranscriber(Transcriber):
                 segments=segments,
                 raw=info
             )
-            # self.on_finish(file_path, result)
+            # Call on_finish to trigger RAG vector DB creation
+            asyncio.create_task(self.on_finish(task_id, file_path, result, embedding_model_name))
             return result
         except Exception as e:
             print(f"转写失败：{e}")
 
 
-    def on_finish(self,video_path:str,result: TranscriptResult)->None:
+    async def on_finish(self, task_id: str, video_path:str, result: TranscriptResult, embedding_model_name: str)->None:
         print("转写完成")
         transcription_finished.send({
             "file_path": video_path,
         })
-
+        # Create RAG vector DB
+        rag_service = RAGService()
+        await rag_service.create_vector_db(task_id, embedding_model_name)
+        logger.info(f"RAG vector DB creation triggered for task {task_id}.")
