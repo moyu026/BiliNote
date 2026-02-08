@@ -1,4 +1,3 @@
-import asyncio
 from faster_whisper import WhisperModel
 
 from app.decorators.timeit import timeit
@@ -7,7 +6,6 @@ from app.transcriber.base import Transcriber
 from app.utils.env_checker import is_cuda_available, is_torch_installed
 from app.utils.logger import get_logger
 from app.utils.path_helper import get_model_dir
-from app.services.rag_service import RAGService  # Import RAGService
 
 from events import transcription_finished
 from pathlib import Path
@@ -124,20 +122,12 @@ class WhisperTranscriber(Transcriber):
                     "vad_options": info.vad_options.__dict__ if hasattr(info, 'vad_options') and info.vad_options else None,
                 }
             )
-            # Call on_finish to trigger RAG vector DB creation
-            asyncio.create_task(self.on_finish(task_id, file_path, result, embedding_model_name))
+            # Trigger event for cleanup - DISABLED to keep video files for playback
+            # transcription_finished.send({
+            #     "file_path": file_path,
+            # })
+            # Note: RAG vector DB creation will be handled in note.py after transcription
             return result
         except Exception as e:
             logger.error(f"转写失败：{e}")
             raise
-
-
-    async def on_finish(self, task_id: str, video_path:str, result: TranscriptResult, embedding_model_name: str)->None:
-        print("转写完成")
-        transcription_finished.send({
-            "file_path": video_path,
-        })
-        # Create RAG vector DB
-        rag_service = RAGService()
-        await rag_service.create_vector_db(task_id, embedding_model_name)
-        logger.info(f"RAG vector DB creation triggered for task {task_id}.")
